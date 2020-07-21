@@ -155,7 +155,19 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
             storageAccountId: this.storageAccount.id,
             isEmulated: false,
             primaryEndpoints: this.storageAccount.primaryEndpoints,
-            generateSasToken: () => this.generateSasToken(),
+            generateSasToken: () => {
+                const permissions: AccountSASPermissions = AccountSASPermissions.parse('rwl');
+                const accountSASSignatureValues: AccountSASSignatureValues = {
+                    expiresOn: new Date(new Date().getTime() + threeDaysInMS),
+                    permissions,
+                    services: 'b', // blob
+                    resourceTypes: 'o', // object
+                };
+                return generateAccountSASQueryParameters(
+                    accountSASSignatureValues,
+                    new StorageSharedKeyCredential(this.storageAccount.name, this.key.value)
+                ).toString();
+            },
             createBlobServiceClient: () => {
                 const credential = new azureStorageBlob.StorageSharedKeyCredential(this.storageAccount.name, this.key.value);
                 return new azureStorageBlob.BlobServiceClient(nonNullProp(this.storageAccount.primaryEndpoints, 'blob'), credential);
@@ -342,19 +354,5 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
 
             throw new Error("This storage account does not support static website hosting.");
         }
-    }
-
-    public generateSasToken(): string {
-        const permissions: AccountSASPermissions = AccountSASPermissions.parse('rwl');
-        const accountSASSignatureValues: AccountSASSignatureValues = {
-            expiresOn: new Date(new Date().getTime() + threeDaysInMS),
-            permissions,
-            services: 'b', // blob
-            resourceTypes: 'o', // object
-        };
-        return generateAccountSASQueryParameters(
-            accountSASSignatureValues,
-            new StorageSharedKeyCredential(this.storageAccount.name, this.key.value)
-        ).toString();
     }
 }
