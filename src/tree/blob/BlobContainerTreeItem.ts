@@ -3,9 +3,11 @@
  *  Licensed under the MIT License. See License.md in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import { TransferProgressEvent } from '@azure/core-http';
 import * as azureStorageBlob from '@azure/storage-blob';
 import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import * as fse from 'fs-extra';
+import * as mime from 'mime';
 import * as path from 'path';
 import * as azCopy from 'se-az-copy';
 import { setAzCopyExes } from 'se-az-copy/dist/src/AzCopyExe';
@@ -16,7 +18,8 @@ import { AzureStorageFS } from '../../AzureStorageFS';
 import { getResourcesPath, staticWebsiteContainerName } from "../../constants";
 import { ext } from "../../extensionVariables";
 import { TransferProgress } from '../../TransferProgress';
-import { createBlobContainerClient, createChildAsNewBlockBlob, doesBlobExist, IBlobContainerCreateChildContext, loadMoreBlobChildren, startAndWaitForCopy } from '../../utils/blobUtils';
+import { startAndWaitForCopy } from '../../utils/azCopyUtils';
+import { createBlobContainerClient, createBlockBlobClient, createChildAsNewBlockBlob, doesBlobExist, IBlobContainerCreateChildContext, loadMoreBlobChildren } from '../../utils/blobUtils';
 import { throwIfCanceled } from '../../utils/errorUtils';
 import { listFilePathsWithAzureSeparator } from '../../utils/fs';
 import { Limits } from '../../utils/limits';
@@ -153,7 +156,7 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
         let child: AzExtTreeItem;
         if (context.blobPath && context.filePath) {
             context.showCreatingTreeItem(context.blobPath);
-            await this.uploadLocalFile(context.filePath, context.blobPath);
+            await this.uploadLocalFile(context.filePath, context.blobPath, await this.shouldUseAzCopy(context, context.filePath));
             child = new BlobTreeItem(this, context.blobPath, this.container);
         } else if (context.childName && context.childType === BlobDirectoryTreeItem.contextValue) {
             child = new BlobDirectoryTreeItem(this, context.childName, this.container);
@@ -192,8 +195,6 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
             lastUploadFolder = uri;
             let filePath = uri.fsPath;
 
-            await this.checkCanUpload(context, filePath);
-
             let blobPath = await vscode.window.showInputBox({
                 prompt: 'Enter a name for the uploaded file (may include a path)',
                 value: path.basename(filePath),
@@ -214,7 +215,7 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
                         let blobTreeItem = await this.treeDataProvider.findTreeItem(blobId, context);
                         if (blobTreeItem) {
                             // A treeItem for this blob already exists, no need to do anything with the tree, just upload
-                            await this.uploadLocalFile(filePath, blobPath);
+                            await this.uploadLocalFile(filePath, blobPath, await this.shouldUseAzCopy(context, filePath));
                             return;
                         }
                     } catch (err) {
@@ -369,49 +370,49 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
         }
     }
 
-    public async uploadLocalFile(filePath: string, blobPath: string, suppressLogs: boolean = false): Promise<void> {
+    public async uploadLocalFile(filePath: string, blobPath: string, useAzCopy?: boolean, suppressLogs: boolean = false): Promise<void> {
         const blobFriendlyPath: string = `${this.friendlyContainerName}/${blobPath}`;
-        // const blockBlobClient: azureStorageBlob.BlockBlobClient = createBlockBlobClient(this.root, this.container.name, blobPath);
-
-        // new azureStorageBlob.generateAccountSASQueryParameters
-
-        // Call this at least once before creating an AzCopy client.
-        // Once you call it you don't have to call it again
-        setAzCopyExes({
-            AzCopyExe: "/Users/wilorey/Downloads/azcopy_darwin_amd64_10.5.0/azcopy",
-            AzCopyExe64: "/Users/wilorey/Downloads/azcopy_darwin_amd64_10.5.0/azcopy",
-            AzCopyExe32: "/Users/wilorey/Downloads/azcopy_darwin_amd64_10.5.0/azcopy"
-        });
-
-        let blobServiceClient: BlobServiceClient = this.root.createBlobServiceClient();
-        let containerClient: ContainerClient = blobServiceClient.getContainerClient(this.container.name);
-
-        const sasToken = this.root.generateSasToken();
-        const copyClient = new azCopy.AzCopyClient({});
-        const src: azCopy.ILocalLocation = { type: "Local", path: filePath, useWildCard: false };
-        const dst: azCopy.IRemoteSasLocation = { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path: filePath, useWildCard: false };
-
-        let jobId = await startAndWaitForCopy(copyClient, src, dst, { fromTo: "LocalBlob", overwriteExisting: "true" });
-        let finalTransferStatus = (await copyClient.getJobInfo(jobId)).latestStatus;
-        console.log(finalTransferStatus);
 
         // tslint:disable-next-line: strict-boolean-expressions
-        // const totalBytes: number = (await fse.stat(filePath)).size || 1;
+        const totalBytes: number = (await fse.stat(filePath)).size || 1;
+        const transferProgress: TransferProgress = new TransferProgress(totalBytes, blobPath);
 
         if (!suppressLogs) {
             ext.outputChannel.show();
             ext.outputChannel.appendLog(`Uploading ${filePath} as ${blobFriendlyPath}`);
         }
 
-        // const transferProgress: TransferProgress = new TransferProgress(totalBytes, blobPath);
-        // const options: azureStorageBlob.BlockBlobParallelUploadOptions = {
-        //     blobHTTPHeaders: {
-        //         // tslint:disable-next-line: strict-boolean-expressions
-        //         blobContentType: mime.getType(blobPath) || undefined
-        //     },
-        //     onProgress: suppressLogs ? undefined : (transferProgressEvent: TransferProgressEvent) => transferProgress.reportToOutputWindow(transferProgressEvent.loadedBytes)
-        // };
-        // await blockBlobClient.uploadFile(filePath, options);
+        if (useAzCopy) {
+            // Call this at least once before creating an AzCopy client.
+            // Once you call it you don't have to call it again
+            setAzCopyExes({
+                AzCopyExe: '/Users/wilorey/Downloads/azcopy_darwin_amd64_10.5.0/azcopy',
+                AzCopyExe64: '',
+                AzCopyExe32: ''
+            });
+
+            let blobServiceClient: BlobServiceClient = this.root.createBlobServiceClient();
+            let containerClient: ContainerClient = blobServiceClient.getContainerClient(this.container.name);
+
+            const sasToken = this.root.generateSasToken();
+            const copyClient = new azCopy.AzCopyClient({});
+            const src: azCopy.ILocalLocation = { type: "Local", path: filePath, useWildCard: false };
+            const dst: azCopy.IRemoteSasLocation = { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path: `/${blobPath}`, useWildCard: false };
+
+            let jobId = await startAndWaitForCopy(copyClient, src, dst, { fromTo: 'LocalBlob', overwriteExisting: "true" }, transferProgress);
+            let finalTransferStatus = (await copyClient.getJobInfo(jobId)).latestStatus;
+            console.log(finalTransferStatus);
+        } else {
+            const blockBlobClient: azureStorageBlob.BlockBlobClient = createBlockBlobClient(this.root, this.container.name, blobPath);
+            const options: azureStorageBlob.BlockBlobParallelUploadOptions = {
+                blobHTTPHeaders: {
+                    // tslint:disable-next-line: strict-boolean-expressions
+                    blobContentType: mime.getType(blobPath) || undefined
+                },
+                onProgress: suppressLogs ? undefined : (transferProgressEvent: TransferProgressEvent) => transferProgress.reportToOutputWindow(transferProgressEvent.loadedBytes)
+            };
+            await blockBlobClient.uploadFile(filePath, options);
+        }
 
         if (!suppressLogs) {
             ext.outputChannel.appendLog(`Successfully uploaded ${blobFriendlyPath}.`);
@@ -432,18 +433,14 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
         return undefined;
     }
 
-    private async checkCanUpload(context: IActionContext, localPath: string): Promise<void> {
+    private async shouldUseAzCopy(context: IActionContext, localPath: string): Promise<boolean> {
         let size = (await fse.stat(localPath)).size;
         context.telemetry.measurements.blockBlobUploadSize = size;
         if (size > Limits.maxUploadDownloadSizeBytes) {
-            context.telemetry.properties.blockBlobTooLargeForUpload = 'true';
-            await Limits.askOpenInStorageExplorer(
-                context,
-                `Please use Storage Explorer to upload files larger than ${Limits.maxUploadDownloadSizeMB}MB.`,
-                this.root.storageAccountId,
-                this.root.subscriptionId,
-                'Azure.BlobContainer',
-                this.container.name);
+            context.telemetry.properties.azCopyBlockBlobUpload = 'true';
+            return true;
+        } else {
+            return false;
         }
     }
 }
