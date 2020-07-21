@@ -5,12 +5,10 @@
 
 import { TransferProgressEvent } from '@azure/core-http';
 import * as azureStorageBlob from '@azure/storage-blob';
-import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import * as fse from 'fs-extra';
 import * as mime from 'mime';
 import * as path from 'path';
-import { AzCopyClient, ILocalLocation, IRemoteSasLocation } from 'se-az-copy';
-import { setAzCopyExes } from 'se-az-copy/dist/src/AzCopyExe';
+import { ILocalLocation, IRemoteSasLocation } from 'se-az-copy';
 import * as vscode from 'vscode';
 import { ProgressLocation, Uri } from 'vscode';
 import { AzExtTreeItem, AzureParentTreeItem, AzureTreeItem, DialogResponses, GenericTreeItem, IActionContext, ICreateChildImplContext, parseError, TelemetryProperties, UserCancelledError } from 'vscode-azureextensionui';
@@ -18,7 +16,7 @@ import { AzureStorageFS } from '../../AzureStorageFS';
 import { getResourcesPath, staticWebsiteContainerName } from "../../constants";
 import { ext } from "../../extensionVariables";
 import { TransferProgress } from '../../TransferProgress';
-import { startAndWaitForCopy } from '../../utils/azCopyUtils';
+import { azCopyTransfer, createAzCopyDestination, createAzCopyLocalSource } from '../../utils/azCopyUtils';
 import { createBlobContainerClient, createBlockBlobClient, createChildAsNewBlockBlob, doesBlobExist, IBlobContainerCreateChildContext, loadMoreBlobChildren } from '../../utils/blobUtils';
 import { throwIfCanceled } from '../../utils/errorUtils';
 import { listFilePathsWithAzureSeparator } from '../../utils/fs';
@@ -383,25 +381,9 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
         }
 
         if (useAzCopy) {
-            // Call this at least once before creating an AzCopy client.
-            // Once you call it you don't have to call it again
-            setAzCopyExes({
-                AzCopyExe: '/Users/wilorey/Downloads/azcopy_darwin_amd64_10.5.0/azcopy',
-                AzCopyExe64: '',
-                AzCopyExe32: ''
-            });
-
-            let blobServiceClient: BlobServiceClient = this.root.createBlobServiceClient();
-            let containerClient: ContainerClient = blobServiceClient.getContainerClient(this.container.name);
-
-            const sasToken: string = this.root.generateSasToken();
-            const copyClient: AzCopyClient = new AzCopyClient({});
-            const src: ILocalLocation = { type: "Local", path: filePath, useWildCard: false };
-            const dst: IRemoteSasLocation = { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path: `/${blobPath}`, useWildCard: false };
-
-            let jobId = await startAndWaitForCopy(copyClient, src, dst, { fromTo: 'LocalBlob', overwriteExisting: "true" }, transferProgress);
-            let finalTransferStatus = (await copyClient.getJobInfo(jobId)).latestStatus;
-            console.log(finalTransferStatus);
+            const src: ILocalLocation = createAzCopyLocalSource(filePath);
+            const dst: IRemoteSasLocation = createAzCopyDestination(this.root, this.container.name, blobPath);
+            await azCopyTransfer(src, dst, transferProgress);
         } else {
             const blockBlobClient: azureStorageBlob.BlockBlobClient = createBlockBlobClient(this.root, this.container.name, blobPath);
             const options: azureStorageBlob.BlockBlobParallelUploadOptions = {
