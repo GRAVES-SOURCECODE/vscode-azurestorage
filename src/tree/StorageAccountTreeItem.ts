@@ -4,12 +4,12 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as azureStorageBlob from '@azure/storage-blob';
+// tslint:disable-next-line:no-require-imports
+import { AccountSASPermissions, AccountSASSignatureValues, generateAccountSASQueryParameters, StorageSharedKeyCredential } from '@azure/storage-blob';
 import * as azureStorageShare from '@azure/storage-file-share';
 import { StorageManagementClient } from 'azure-arm-storage';
 import { StorageAccountKey } from 'azure-arm-storage/lib/models';
 import * as azureStorage from "azure-storage";
-// tslint:disable-next-line:no-require-imports
-import opn = require('opn');
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { commands, MessageItem, Uri, window } from 'vscode';
@@ -29,6 +29,8 @@ import { FileShareGroupTreeItem } from './fileShare/FileShareGroupTreeItem';
 import { IStorageRoot } from './IStorageRoot';
 import { QueueGroupTreeItem } from './queue/QueueGroupTreeItem';
 import { TableGroupTreeItem } from './table/TableGroupTreeItem';
+// tslint:disable-next-line:no-require-imports
+import opn = require('opn');
 
 export type WebsiteHostingStatus = {
     capable: boolean;
@@ -151,6 +153,7 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
             storageAccountId: this.storageAccount.id,
             isEmulated: false,
             primaryEndpoints: this.storageAccount.primaryEndpoints,
+            generateSasToken: () => this.generateSasToken(),
             createBlobServiceClient: () => {
                 const credential = new azureStorageBlob.StorageSharedKeyCredential(this.storageAccount.name, this.key.value);
                 return new azureStorageBlob.BlobServiceClient(nonNullProp(this.storageAccount.primaryEndpoints, 'blob'), credential);
@@ -337,5 +340,59 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
 
             throw new Error("This storage account does not support static website hosting.");
         }
+    }
+
+    public generateSasToken(): string {
+        // let operationParameters = {
+        //     accountName: this.storageAccount.name,
+        //     accountKey: this.key,
+        //     policy: parameters.options,
+        //     version: "2019-02-02"
+        // };
+
+        // if (!args.accountName || !args.accountKey) {
+        //     throw Error("Unable to generate SAS. Account name and account key are required for generating an account SAS");
+        // }
+
+        const permissions: AccountSASPermissions = new AccountSASPermissions();
+        permissions.read = true;
+        permissions.write = true;
+        permissions.list = true;
+
+        // const services: AccountSASServices = new AccountSASServices();
+
+        const accountSASValues: AccountSASSignatureValues = {
+            expiresOn: new Date(new Date().getTime() + (1000 * 60 * 60 * 24 * 3)),
+            permissions,
+            services: 'b', // blob
+            resourceTypes: 'o', // object
+        };
+        return generateAccountSASQueryParameters(
+            accountSASValues, new StorageSharedKeyCredential(this.storageAccount.name, this.key.value)
+        ).toString();
+
+        // let result: IGenerateSasResult = { sasToken: sasToken, connectionString: "" };
+        // let resultConnectionString: { [key: string]: string } = {};
+        // resultConnectionString[AzureStorage.Constants.ConnectionStringKeys.SHARED_ACCESS_SIGNATURE_NAME] = sasToken;
+
+        // let parsedSasToken = new SasToken(sasToken);
+        // let parsedConnectionString = new ConnectionString(this.connectionString);
+        // // TODO: Replace the constants with raw values to remove azure-storage dependency
+        // if (parsedSasToken.hasServiceAccess("b") && !!parsedConnectionString.blobEndpoint) {
+        //     resultConnectionString[AzureStorage.Constants.ConnectionStringKeys.BLOB_ENDPOINT_NAME] = result.blobSasUrl = parsedConnectionString.blobEndpoint;
+        // }
+        // if (parsedSasToken.hasServiceAccess("f") && !!parsedConnectionString.fileEndpoint) {
+        //     resultConnectionString[AzureStorage.Constants.ConnectionStringKeys.FILE_ENDPOINT_NAME] = result.fileSasUrl = parsedConnectionString.fileEndpoint;
+        // }
+        // if (parsedSasToken.hasServiceAccess("q") && !!parsedConnectionString.queueEndpoint) {
+        //     resultConnectionString[AzureStorage.Constants.ConnectionStringKeys.QUEUE_ENDPOINT_NAME] = result.queueSasUrl = parsedConnectionString.queueEndpoint;
+        // }
+        // if (parsedSasToken.hasServiceAccess("t") && !!parsedConnectionString.tableEndpoint) {
+        //     resultConnectionString[AzureStorage.Constants.ConnectionStringKeys.TABLE_ENDPOINT_NAME] = result.tableSasUrl = parsedConnectionString.tableEndpoint;
+        // }
+
+        // result.connectionString = ConnectionString.createFromValues(resultConnectionString);
+
+        // return result;
     }
 }

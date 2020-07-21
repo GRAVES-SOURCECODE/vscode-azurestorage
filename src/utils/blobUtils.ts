@@ -6,6 +6,7 @@
 import * as azureStorageBlob from '@azure/storage-blob';
 import * as mime from "mime";
 import * as path from 'path';
+import { AzCopyLocation, IAzCopyClient, ICopyOptions, TransferStatus } from 'se-az-copy';
 import * as vscode from 'vscode';
 import { AzExtTreeItem, IActionContext, ICreateChildImplContext } from 'vscode-azureextensionui';
 import { maxPageSize } from '../constants';
@@ -121,6 +122,18 @@ export async function showBlobPathInputBox(parent: BlobContainerTreeItem | BlobD
             return undefined;
         }
     });
+}
+
+export async function startAndWaitForCopy(copyClient: IAzCopyClient, src: AzCopyLocation, dst: AzCopyLocation, options: ICopyOptions): Promise<string> {
+    let jobId = await copyClient.copy(src, dst, options);
+    let status: TransferStatus | undefined;
+    while (!status || status.StatusType !== "EndOfJob") {
+        status = (await copyClient.getJobInfo(jobId)).latestStatus;
+        // tslint:disable-next-line: no-string-based-set-timeout
+        await new Promise((resolve, _reject) => setTimeout(resolve, 1000));
+    }
+
+    return jobId;
 }
 
 export interface IBlobContainerCreateChildContext extends IActionContext {

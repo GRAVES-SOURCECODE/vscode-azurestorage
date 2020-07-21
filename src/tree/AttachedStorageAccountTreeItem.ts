@@ -117,6 +117,10 @@ class AttachedStorageRoot extends AttachedAccountRoot {
         throw new Error(localize('cannotRetrieveStorageAccountIdForAttachedAccount', 'Cannot retrieve storage account id for an attached account.'));
     }
 
+    public generateSasToken(): string {
+        throw new Error(localize('sasTokenAttachedAccount', 'Cannot retrieve SAS token for an attached account.'));
+    }
+
     public createBlobServiceClient(): azureStorageBlob.BlobServiceClient {
         return azureStorageBlob.BlobServiceClient.fromConnectionString(this._connectionString, this._serviceClientPipelineOptions);
     }
