@@ -9,7 +9,7 @@ import { BlobServiceClient, ContainerClient } from '@azure/storage-blob';
 import * as fse from 'fs-extra';
 import * as mime from 'mime';
 import * as path from 'path';
-import * as azCopy from 'se-az-copy';
+import { AzCopyClient, ILocalLocation, IRemoteSasLocation } from 'se-az-copy';
 import { setAzCopyExes } from 'se-az-copy/dist/src/AzCopyExe';
 import * as vscode from 'vscode';
 import { ProgressLocation, Uri } from 'vscode';
@@ -394,10 +394,10 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
             let blobServiceClient: BlobServiceClient = this.root.createBlobServiceClient();
             let containerClient: ContainerClient = blobServiceClient.getContainerClient(this.container.name);
 
-            const sasToken = this.root.generateSasToken();
-            const copyClient = new azCopy.AzCopyClient({});
-            const src: azCopy.ILocalLocation = { type: "Local", path: filePath, useWildCard: false };
-            const dst: azCopy.IRemoteSasLocation = { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path: `/${blobPath}`, useWildCard: false };
+            const sasToken: string = this.root.generateSasToken();
+            const copyClient: AzCopyClient = new AzCopyClient({});
+            const src: ILocalLocation = { type: "Local", path: filePath, useWildCard: false };
+            const dst: IRemoteSasLocation = { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path: `/${blobPath}`, useWildCard: false };
 
             let jobId = await startAndWaitForCopy(copyClient, src, dst, { fromTo: 'LocalBlob', overwriteExisting: "true" }, transferProgress);
             let finalTransferStatus = (await copyClient.getJobInfo(jobId)).latestStatus;
@@ -436,11 +436,9 @@ export class BlobContainerTreeItem extends AzureParentTreeItem<IStorageRoot> imp
     private async shouldUseAzCopy(context: IActionContext, localPath: string): Promise<boolean> {
         let size = (await fse.stat(localPath)).size;
         context.telemetry.measurements.blockBlobUploadSize = size;
-        if (size > Limits.maxUploadDownloadSizeBytes) {
-            context.telemetry.properties.azCopyBlockBlobUpload = 'true';
-            return true;
-        } else {
-            return false;
-        }
+
+        const useAzCopy: boolean = size > Limits.maxUploadDownloadSizeBytes;
+        context.telemetry.properties.azCopyBlockBlobUpload = useAzCopy ? 'true' : 'false';
+        return useAzCopy;
     }
 }

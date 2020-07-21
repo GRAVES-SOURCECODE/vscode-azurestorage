@@ -14,7 +14,6 @@ export interface IStorageRoot extends ISubscriptionContext {
     storageAccountId: string;
     isEmulated: boolean;
     primaryEndpoints?: Endpoints;
-    // createAzCopyClient(): AzCopyClient;
     generateSasToken(): string;
     createBlobServiceClient(): azureStorageBlob.BlobServiceClient;
     createFileService(): azureStorage.FileService;

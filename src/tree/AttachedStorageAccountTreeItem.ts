@@ -118,7 +118,7 @@ class AttachedStorageRoot extends AttachedAccountRoot {
     }
 
     public generateSasToken(): string {
-        throw new Error(localize('sasTokenAttachedAccount', 'Cannot retrieve SAS token for an attached account.'));
+        throw new Error(localize('noGenerateSasToken', 'Cannot generate SAS token for an attached account.'));
     }
 
     public createBlobServiceClient(): azureStorageBlob.BlobServiceClient {
