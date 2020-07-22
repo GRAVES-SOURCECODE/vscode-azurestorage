@@ -17,6 +17,7 @@ import { getResourcesPath, staticWebsiteContainerName } from '../constants';
 import { ext } from "../extensionVariables";
 import { localize } from '../utils/localize';
 import { nonNullProp } from '../utils/nonNull';
+import { openUrl } from '../utils/openUrl';
 import { StorageAccountKeyWrapper, StorageAccountWrapper } from '../utils/storageWrappers';
 import { BlobContainerGroupTreeItem } from './blob/BlobContainerGroupTreeItem';
 import { BlobContainerTreeItem } from "./blob/BlobContainerTreeItem";
@@ -28,9 +29,6 @@ import { FileShareGroupTreeItem } from './fileShare/FileShareGroupTreeItem';
 import { IStorageRoot } from './IStorageRoot';
 import { QueueGroupTreeItem } from './queue/QueueGroupTreeItem';
 import { TableGroupTreeItem } from './table/TableGroupTreeItem';
-
-// tslint:disable-next-line:no-require-imports
-import opn = require('opn');
 
 export type WebsiteHostingStatus = {
     capable: boolean;
@@ -332,7 +330,7 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
 
         let endpoint = this.getPrimaryWebEndpoint();
         if (endpoint) {
-            await opn(endpoint);
+            await openUrl(endpoint);
         } else {
             throw new Error(`Could not retrieve the primary web endpoint for ${this.label}`);
         }
