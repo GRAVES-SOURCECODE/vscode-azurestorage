@@ -22,8 +22,8 @@ export function createAzCopyLocalSource(sourcePath: string): ILocalLocation {
 }
 
 export function createAzCopyDestination(root: IStorageRoot, containerName: string, destinationPath: string): IRemoteSasLocation {
-    const containerClient: ContainerClient = createBlobContainerClient(root, containerName);
     const sasToken: string = root.generateSasToken();
+    const containerClient: ContainerClient = createBlobContainerClient(root, containerName);
     const path: string = destinationPath[0] === '/' ? destinationPath : `/${destinationPath}`;
     return { type: "RemoteSas", sasToken, resourceUri: containerClient.url, path, useWildCard: false };
 }

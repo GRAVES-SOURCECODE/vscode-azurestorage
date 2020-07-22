@@ -156,7 +156,7 @@ export class StorageAccountTreeItem extends AzureParentTreeItem<IStorageRoot> {
             generateSasToken: () => {
                 const accountSASSignatureValues: AccountSASSignatureValues = {
                     expiresOn: new Date(new Date().getTime() + threeDaysInMS),
-                    permissions: AccountSASPermissions.parse('rwl'), // read, write, list,
+                    permissions: AccountSASPermissions.parse('rwl'), // read, write, list
                     services: 'b', // blob
                     resourceTypes: 'o', // object
                 };
