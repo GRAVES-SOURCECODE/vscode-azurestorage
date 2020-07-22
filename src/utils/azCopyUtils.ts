@@ -41,7 +41,9 @@ export async function azCopyTransfer(src: ILocalLocation, dst: IRemoteSasLocatio
         const copyClient: AzCopyClient = new AzCopyClient({});
         let jobId = await startAndWaitForCopy(copyClient, src, dst, { fromTo: 'LocalBlob', overwriteExisting: "true" }, transferProgress);
         let finalTransferStatus = (await copyClient.getJobInfo(jobId)).latestStatus;
-        console.log(finalTransferStatus);
+        if (finalTransferStatus?.JobStatus === 'Failed') {
+            throw new Error(localize('azCopyTransferFailed', `AzCopy Transfer Failed: ${finalTransferStatus.ErrorMsg}`));
+        }
     }
 }
 
